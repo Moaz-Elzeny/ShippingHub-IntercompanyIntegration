@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using ShippingHub.Application.Abstractions;
 using ShippingHub.Infrastructure.Persistence;
 using ShippingHub.Infrastructure.Services.Auth;
+using ShippingHub.Infrastructure.Services.Webhooks;
 
 namespace ShippingHub.Infrastructure;
 
@@ -25,6 +26,15 @@ public static class DependencyInjection
 
         services.AddScoped<ICurrentCompany, CurrentCompany>();
 
+        services.AddHttpClient("webhooks", c =>
+        {
+            c.Timeout = TimeSpan.FromSeconds(10);
+        });
+
+        services.AddSingleton<InMemoryWebhookQueue>();
+        services.AddSingleton<IWebhookQueue>(sp => sp.GetRequiredService<InMemoryWebhookQueue>());
+        services.AddScoped<IWebhookDispatcher, WebhookDispatcher>();
+        services.AddHostedService<WebhookWorker>();
         return services;
     }
 }

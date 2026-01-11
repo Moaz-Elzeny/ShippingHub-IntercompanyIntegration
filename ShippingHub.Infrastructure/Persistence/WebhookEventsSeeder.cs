@@ -7,7 +7,6 @@ public static class WebhookEventsSeeder
 {
     public static async Task SeedAsync(ApplicationDbContext db, CancellationToken ct = default)
     {
-        // لو موجودين خلاص متزرعيش تاني
         if (await db.WebhookEvents.AnyAsync(ct))
             return;
 

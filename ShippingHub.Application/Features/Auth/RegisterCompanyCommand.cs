@@ -9,8 +9,7 @@ namespace ShippingHub.Application.Features.Auth
 {
     public sealed record RegisterCompanyCommand(string Name) : IRequest<AuthResponse>
     {
-        public sealed class RegisterCompanyHandler(IApplicationDbContext db, IJwtTokenService tokenService)
-    : IRequestHandler<RegisterCompanyCommand, AuthResponse>
+        public sealed class RegisterCompanyHandler(IApplicationDbContext db, IJwtTokenService tokenService) : IRequestHandler<RegisterCompanyCommand, AuthResponse>
         {
             public async Task<AuthResponse> Handle(RegisterCompanyCommand request, CancellationToken ct)
             {
