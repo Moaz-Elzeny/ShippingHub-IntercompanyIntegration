@@ -12,7 +12,7 @@ namespace ShippingHub.Application.Features.Shipments
         public sealed class CreateShipmentHandler(
             IApplicationDbContext db,
             ICurrentCompany current,
-            IWebhookQueue webhookQueue) : IRequestHandler<CreateShipmentCommand, ShipmentDto>
+            IWebhookDeliveryService deliveryService) : IRequestHandler<CreateShipmentCommand, ShipmentDto>
         {
             public async Task<ShipmentDto> Handle(CreateShipmentCommand request, CancellationToken ct)
             {
@@ -54,22 +54,21 @@ namespace ShippingHub.Application.Features.Shipments
                 await db.SaveChangesAsync(ct);
 
                 var corr = Guid.NewGuid();
+                var payload = BuildEventPayload(entity, corr);
 
-                // Event: created
-                await webhookQueue.EnqueueAsync(new WebhookJob(
-                    TargetCompanyId: entity.ReceiverCompanyId,
-                    EventCode: "SHIPMENT_CREATED",
-                    PayloadJson: BuildEventPayload(entity, corr),
-                    CorrelationId: corr
-                ), ct);
+                await deliveryService.EnqueueDeliveriesAsync(
+                    targetCompanyId: entity.ReceiverCompanyId,
+                    eventCode: "SHIPMENT_CREATED",
+                    payloadJson: payload,
+                    correlationId: corr,
+                    ct);
 
-                // Event: status changed (Created)
-                await webhookQueue.EnqueueAsync(new WebhookJob(
-                    TargetCompanyId: entity.ReceiverCompanyId,
-                    EventCode: "SHIPMENT_STATUS_CHANGED",
-                    PayloadJson: BuildEventPayload(entity, corr),
-                    CorrelationId: corr
-                ), ct);
+                await deliveryService.EnqueueDeliveriesAsync(
+                    targetCompanyId: entity.ReceiverCompanyId,
+                    eventCode: "SHIPMENT_STATUS_CHANGED",
+                    payloadJson: payload,
+                    correlationId: corr,
+                    ct);
 
                 return new ShipmentDto(entity.Id, entity.SenderCompanyId, entity.ReceiverCompanyId, entity.Status, entity.Payload);
             }

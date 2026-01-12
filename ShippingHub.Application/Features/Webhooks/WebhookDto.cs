@@ -8,5 +8,6 @@ public sealed record WebhookDto(
     int EventId,
     string EventCode,
     string Url,
-    bool IsActive
+    bool IsActive,
+    string? Secret
 );

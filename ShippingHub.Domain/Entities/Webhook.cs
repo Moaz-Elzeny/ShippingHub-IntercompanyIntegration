@@ -12,6 +12,7 @@
 
         public string Url { get; set; } = "";
         public bool IsActive { get; set; } = true;
+        public string Secret { get; set; } = "";
 
         public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     }

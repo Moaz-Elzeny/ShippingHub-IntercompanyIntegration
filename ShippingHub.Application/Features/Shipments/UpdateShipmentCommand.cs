@@ -10,8 +10,7 @@ namespace ShippingHub.Application.Features.Shipments
         public sealed class UpdateShipmentHandler(
             IApplicationDbContext db,
             ICurrentCompany current,
-            IWebhookQueue webhookQueue)
-            : IRequestHandler<UpdateShipmentCommand, ShipmentDto>
+            IWebhookDeliveryService deliveryService) : IRequestHandler<UpdateShipmentCommand, ShipmentDto>
         {
             public async Task<ShipmentDto> Handle(UpdateShipmentCommand request, CancellationToken ct)
             {
@@ -27,6 +26,9 @@ namespace ShippingHub.Application.Features.Shipments
                 if (entity.SenderCompanyId != me && entity.ReceiverCompanyId != me)
                     throw new UnauthorizedAccessException("Not allowed.");
 
+                if (!ShipmentStatusRules.IsValidTransition(entity.Status, request.Status))
+                    throw new InvalidOperationException("Invalid status transition.");
+
                 var oldStatus = entity.Status;
 
                 entity.Payload = request.PayloadJson;
@@ -40,22 +42,25 @@ namespace ShippingHub.Application.Features.Shipments
                 // Notify the OTHER party (if sender updated -> notify receiver, if receiver updated -> notify sender)
                 var targetCompanyId = (me == entity.SenderCompanyId) ? entity.ReceiverCompanyId : entity.SenderCompanyId;
 
-                await webhookQueue.EnqueueAsync(new WebhookJob(
-                    TargetCompanyId: targetCompanyId,
-                    EventCode: "SHIPMENT_UPDATED",
-                    PayloadJson: BuildEventPayload(entity, corr),
-                    CorrelationId: corr
-                ), ct);
+                var payload = BuildEventPayload(entity, corr);
+
+                await deliveryService.EnqueueDeliveriesAsync(
+                    targetCompanyId: targetCompanyId,
+                    eventCode: "SHIPMENT_UPDATED",
+                    payloadJson: payload,
+                    correlationId: corr,
+                    ct);
 
                 if (oldStatus != entity.Status)
                 {
-                    await webhookQueue.EnqueueAsync(new WebhookJob(
-                        TargetCompanyId: targetCompanyId,
-                        EventCode: "SHIPMENT_STATUS_CHANGED",
-                        PayloadJson: BuildEventPayload(entity, corr),
-                        CorrelationId: corr
-                    ), ct);
+                    await deliveryService.EnqueueDeliveriesAsync(
+                        targetCompanyId: targetCompanyId,
+                        eventCode: "SHIPMENT_STATUS_CHANGED",
+                        payloadJson: payload,
+                        correlationId: corr,
+                        ct);
                 }
+
 
                 return new ShipmentDto(entity.Id, entity.SenderCompanyId, entity.ReceiverCompanyId, entity.Status, entity.Payload);
             }

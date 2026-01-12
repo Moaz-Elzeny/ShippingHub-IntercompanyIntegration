@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using ShippingHub.Application.Abstractions;
 using ShippingHub.Domain.Entities;
+using ShippingHub.Infrastructure.Services.Webhooks;
 
 namespace ShippingHub.Application.Features.Webhooks;
 
@@ -31,13 +32,14 @@ public sealed record CreateWebhookCommand(int EventId, string Url) : IRequest<We
                 CompanyId = companyId,
                 EventId = request.EventId,
                 Url = request.Url.Trim(),
+                Secret = WebhookSecretGenerator.Generate(),
                 IsActive = true
             };
 
             db.Webhooks.Add(webhook);
             await db.SaveChangesAsync(ct);
 
-            return new WebhookDto(webhook.Id, ev.Id, ev.EventCode, webhook.Url, webhook.IsActive);
+            return new WebhookDto(webhook.Id, ev.Id, ev.EventCode, webhook.Url, webhook.IsActive, webhook.Secret);
         }
     }
 }

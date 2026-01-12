@@ -10,6 +10,8 @@ public interface IApplicationDbContext
     DbSet<WebhookEvent> WebhookEvents { get; }
     DbSet<Webhook> Webhooks { get; }
     DbSet<Shipment> Shipments { get; }
+    DbSet<WebhookDelivery> WebhookDeliveries { get; }
+    DbSet<IdempotencyKey> IdempotencyKeys { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

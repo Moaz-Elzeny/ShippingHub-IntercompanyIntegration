@@ -31,6 +31,9 @@ public static class DependencyInjection
             c.Timeout = TimeSpan.FromSeconds(10);
         });
 
+        services.AddScoped<IWebhookDeliveryService, WebhookDeliveryService>();
+        services.AddHostedService<WebhookDeliveryWorker>();
+
         services.AddSingleton<InMemoryWebhookQueue>();
         services.AddSingleton<IWebhookQueue>(sp => sp.GetRequiredService<InMemoryWebhookQueue>());
         services.AddScoped<IWebhookDispatcher, WebhookDispatcher>();

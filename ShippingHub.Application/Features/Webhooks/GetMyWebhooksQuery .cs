@@ -21,7 +21,7 @@ public sealed record GetMyWebhooksQuery : IRequest<List<WebhookDto>>
                 .Join(db.WebhookEvents.AsNoTracking(),
                     w => w.EventId,
                     e => e.Id,
-                    (w, e) => new WebhookDto(w.Id, e.Id, e.EventCode, w.Url, w.IsActive))
+                    (w, e) => new WebhookDto(w.Id, e.Id, e.EventCode, w.Url, w.IsActive, null))
                 .OrderBy(x => x.Id)
                 .ToListAsync(ct);
         }

@@ -13,6 +13,8 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     public DbSet<WebhookEvent> WebhookEvents => Set<WebhookEvent>();
     public DbSet<Webhook> Webhooks => Set<Webhook>();
     public DbSet<Shipment> Shipments => Set<Shipment>();
+    public DbSet<WebhookDelivery> WebhookDeliveries => Set<WebhookDelivery>();
+    public DbSet<IdempotencyKey> IdempotencyKeys => Set<IdempotencyKey>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -34,6 +36,7 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
         modelBuilder.Entity<Webhook>(e =>
         {
             e.Property(x => x.Url).HasMaxLength(2000).IsRequired();
+            e.Property(x => x.Secret).HasMaxLength(200).IsRequired();
             e.HasIndex(x => new { x.CompanyId, x.EventId }).IsUnique();
         });
 
@@ -41,5 +44,19 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
         {
             e.HasIndex(x => new { x.SenderCompanyId, x.ReceiverCompanyId }).IsUnique();
         });
+        modelBuilder.Entity<WebhookDelivery>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.EventCode).HasMaxLength(100);
+            e.HasIndex(x => new { x.Status, x.NextRetryAtUtc });
+            e.HasIndex(x => x.CorrelationId);
+        });
+        modelBuilder.Entity<IdempotencyKey>(e =>
+        {
+            e.HasIndex(x => new { x.CompanyId, x.Key }).IsUnique();
+            e.Property(x => x.Key).HasMaxLength(200);
+        });
+
+
     }
 }
