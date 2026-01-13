@@ -1,15 +1,13 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
-using Microsoft.OpenApi;
+using Microsoft.OpenApi.Models;
 using ShippingHub.Api.Middlewares;
 using ShippingHub.Application;
 using ShippingHub.Infrastructure;
 using ShippingHub.Infrastructure.Persistence;
 using System.Text;
-using System.Collections.Generic;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -35,17 +33,20 @@ builder.Services.AddSwaggerGen(c =>
 
     c.AddSecurityDefinition("Bearer", bearerScheme);
 
-//    c.AddSecurityRequirement(new OpenApiSecurityRequirement
-//{
-//    {
-//        new OpenApiSecuritySchemeReference
-//        {
-//            Id = "Bearer",
-//            Type = ReferenceType.SecurityScheme
-//        },
-//        new List<string>()
-//    }
-//});
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+{
+    {
+        new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            new string[] { }
+    }
+});
 
 });
 
