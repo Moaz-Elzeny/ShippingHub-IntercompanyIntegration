@@ -89,30 +89,26 @@ builder.Services.AddHttpContextAccessor();
 
 var app = builder.Build();
 
-using (var scope = app.Services.CreateScope())
-{
-    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    await db.Database.MigrateAsync();
-    await WebhookEventsSeeder.SeedAsync(db);
-}
-app.UseRateLimiter();
-app.MapControllers().RequireRateLimiting("default");
 app.UseMiddleware<ExceptionHandlingMiddleware>();
-app.UseMiddleware<IdempotencyMiddleware>();
-app.UseSwaggerUI(c =>
-{
-    c.SwaggerEndpoint("/openapi/v1.json", "ShippingHub v1");
-    c.RoutePrefix = "swagger";
-});
 
-if (app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment()) 
 {
     app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("v1/swagger.json", "ShippingHub v1");
+        c.RoutePrefix = "swagger";
+    });
 }
 
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapControllers();
+app.UseRateLimiter();
+
+app.UseMiddleware<IdempotencyMiddleware>();
+
+app.MapControllers().RequireRateLimiting("default");
+
 app.Run();
+
