@@ -56,7 +56,12 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
             e.HasIndex(x => new { x.CompanyId, x.Key }).IsUnique();
             e.Property(x => x.Key).HasMaxLength(200);
         });
-
+        modelBuilder.Entity<Shipment>(e =>
+        {
+            e.Property(x => x.ClientName).HasMaxLength(200).IsRequired();
+            e.Property(x => x.PhoneNumber).HasMaxLength(50).IsRequired();
+            e.Property(x => x.AddressDescription).HasMaxLength(1000).IsRequired();
+        });
 
     }
 }

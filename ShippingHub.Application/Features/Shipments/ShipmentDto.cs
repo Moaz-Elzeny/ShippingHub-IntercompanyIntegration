@@ -2,7 +2,6 @@
 
 namespace ShippingHub.Application.Features.Shipments;
 
-public sealed record CreateShipmentRequest(int ReceiverCompanyId, string PayloadJson);
 public sealed record UpdateShipmentRequest(string PayloadJson, ShipmentStatus Status);
 
 public sealed record ShipmentDto(

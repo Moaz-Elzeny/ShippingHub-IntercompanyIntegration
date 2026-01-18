@@ -4,6 +4,7 @@
     {
         Created = 1,
         InTransit = 2,
-        Delivered = 3
+        Delivered = 3,
+        CANCELLED = 4
     }
 }

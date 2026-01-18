@@ -15,8 +15,8 @@ public class ShipmentsController(IMediator mediator) : ControllerBase
         => await mediator.Send(new GetMyShipmentsQuery(), ct);
 
     [HttpPost]
-    public async Task<ActionResult<ShipmentDto>> Create([FromBody] CreateShipmentRequest req, CancellationToken ct)
-        => await mediator.Send(new CreateShipmentCommand(req.ReceiverCompanyId, req.PayloadJson), ct);
+    public async Task<ActionResult<ShipmentDto>> Create([FromBody] CreateShipmentRequestDto dto, CancellationToken ct)
+    => await mediator.Send(new CreateShipmentCommand(dto.ReceiverCompanyId, dto), ct);
 
     [HttpPut("{id:int}")]
     public async Task<ActionResult<ShipmentDto>> Update(int id, [FromBody] UpdateShipmentRequest req, CancellationToken ct)

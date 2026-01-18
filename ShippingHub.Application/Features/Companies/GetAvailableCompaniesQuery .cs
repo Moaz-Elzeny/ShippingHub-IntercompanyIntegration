@@ -16,17 +16,15 @@ namespace ShippingHub.Application.Features.Companies
             {
                 var myCompanyId = currentCompany.CompanyId;
 
-                // لو عايزة تخليه protected فقط، خلي Authorize على الكنترولر
                 if (myCompanyId <= 0)
                     throw new UnauthorizedAccessException();
 
-                // companies: Active + have at least 1 active webhook
                 var query = db.Companies.AsNoTracking()
                     .Where(c => c.Status == CompanyStatus.Active)
                     .Where(c => c.Id != myCompanyId)
                     .Where(c => db.Webhooks.Any(w => w.CompanyId == c.Id && w.IsActive))
-                    .Select(c => new AvailableCompanyDto(c.Id, c.Name))
-                    .OrderBy(c => c.Name);
+                    .OrderBy(c => c.Name)
+                    .Select(c => new AvailableCompanyDto(c.Id, c.Name));
 
                 return await query.ToListAsync(ct);
             }

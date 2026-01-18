@@ -5,92 +5,110 @@ using ShippingHub.Domain.Entities;
 using ShippingHub.Domain.Enums;
 using System.Text.Json;
 
-namespace ShippingHub.Application.Features.Shipments
+namespace ShippingHub.Application.Features.Shipments;
+
+public sealed record CreateShipmentCommand(int ReceiverCompanyId, CreateShipmentRequestDto Dto) : IRequest<ShipmentDto>;
+
+public sealed class CreateShipmentHandler(
+    IApplicationDbContext db,
+    ICurrentCompany current,
+    IWebhookDeliveryService deliveryService)
+    : IRequestHandler<CreateShipmentCommand, ShipmentDto>
 {
-    public sealed record CreateShipmentCommand(int ReceiverCompanyId, string PayloadJson) : IRequest<ShipmentDto>
+    public async Task<ShipmentDto> Handle(CreateShipmentCommand request, CancellationToken ct)
     {
-        public sealed class CreateShipmentHandler(
-            IApplicationDbContext db,
-            ICurrentCompany current,
-            IWebhookDeliveryService deliveryService) : IRequestHandler<CreateShipmentCommand, ShipmentDto>
+        var senderId = current.CompanyId;
+        if (senderId <= 0) throw new UnauthorizedAccessException();
+
+        // receiver exists + active
+        var receiver = await db.Companies.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == request.ReceiverCompanyId, ct);
+
+        if (receiver is null) throw new KeyNotFoundException("Company not found.");
+        if (receiver.Status != CompanyStatus.Active) throw new UnauthorizedAccessException("Company inactive or blocked.");
+
+        // collaboration approved (either direction)
+        var approved = await db.CollaborationRequests.AsNoTracking()
+            .AnyAsync(r =>
+                ((r.SenderCompanyId == senderId && r.ReceiverCompanyId == request.ReceiverCompanyId) ||
+                 (r.SenderCompanyId == request.ReceiverCompanyId && r.ReceiverCompanyId == senderId)) &&
+                r.Status == CollaborationRequestStatus.Approved, ct);
+
+        if (!approved) throw new UnauthorizedAccessException("No active collaboration.");
+
+        // receiver must have at least one active webhook (rule)
+        var hasWebhook = await db.Webhooks.AsNoTracking()
+            .AnyAsync(w => w.CompanyId == request.ReceiverCompanyId && w.IsActive, ct);
+
+        if (!hasWebhook) throw new UnauthorizedAccessException("Target company has no active webhook.");
+
+        // payload -> json string
+        var payloadJson = SerializePayload(request.Dto.Payload);
+
+        var shipment = new Shipment
         {
-            public async Task<ShipmentDto> Handle(CreateShipmentCommand request, CancellationToken ct)
-            {
-                var senderId = current.CompanyId;
-                if (senderId <= 0) throw new UnauthorizedAccessException();
+            SenderCompanyId = senderId,
+            ReceiverCompanyId = request.ReceiverCompanyId,
 
-                // validate payload json
-                ValidateJson(request.PayloadJson);
+            ClientName = request.Dto.ClientName,
+            PhoneNumber = request.Dto.PhoneNumber,
+            AddressDescription = request.Dto.AddressDescription,
+            CashOnDelivery = request.Dto.CashOnDelivery,
 
-                // receiver exists + active
-                var receiver = await db.Companies.AsNoTracking().FirstOrDefaultAsync(x => x.Id == request.ReceiverCompanyId, ct);
-                if (receiver is null) throw new KeyNotFoundException("Company not found.");
-                if (receiver.Status != CompanyStatus.Active) throw new UnauthorizedAccessException("Company inactive or blocked.");
+            Status = request.Dto.Status ?? ShipmentStatus.Created,
+            Payload = payloadJson,
 
-                // collaboration approved (either direction)
-                var approved = await db.CollaborationRequests.AsNoTracking()
-                    .AnyAsync(r =>
-                        ((r.SenderCompanyId == senderId && r.ReceiverCompanyId == request.ReceiverCompanyId) ||
-                         (r.SenderCompanyId == request.ReceiverCompanyId && r.ReceiverCompanyId == senderId)) &&
-                        r.Status == CollaborationRequestStatus.Approved, ct);
+            CreatedAtUtc = DateTime.UtcNow
+        };
 
-                if (!approved) throw new UnauthorizedAccessException("No active collaboration.");
+        db.Shipments.Add(shipment);
+        await db.SaveChangesAsync(ct);
 
-                // receiver must have at least one active webhook (rule)
-                var hasWebhook = await db.Webhooks.AsNoTracking()
-                    .AnyAsync(w => w.CompanyId == request.ReceiverCompanyId && w.IsActive, ct);
+        // Enqueue webhook deliveries
+        var corr = Guid.NewGuid();
+        var eventPayload = BuildEventPayload(shipment, corr);
 
-                if (!hasWebhook) throw new UnauthorizedAccessException("Target company has no active webhook.");
+        await deliveryService.EnqueueDeliveriesAsync(
+            targetCompanyId: shipment.ReceiverCompanyId,
+            eventCode: "SHIPMENT_CREATED",
+            payloadJson: eventPayload,
+            correlationId: corr,
+            ct);
 
-                var entity = new Shipment
-                {
-                    SenderCompanyId = senderId,
-                    ReceiverCompanyId = request.ReceiverCompanyId,
-                    Status = ShipmentStatus.Created,
-                    Payload = request.PayloadJson
-                };
+        await deliveryService.EnqueueDeliveriesAsync(
+            targetCompanyId: shipment.ReceiverCompanyId,
+            eventCode: "SHIPMENT_STATUS_CHANGED",
+            payloadJson: eventPayload,
+            correlationId: corr,
+            ct);
 
-                db.Shipments.Add(entity);
-                await db.SaveChangesAsync(ct);
+        return new ShipmentDto(shipment.Id, shipment.SenderCompanyId, shipment.ReceiverCompanyId, shipment.Status, shipment.Payload);
+    }
 
-                var corr = Guid.NewGuid();
-                var payload = BuildEventPayload(entity, corr);
+    private static string SerializePayload(object? payload)
+    {
+        // لو null نخليها {}
+        return payload is null
+            ? "{}"
+            : JsonSerializer.Serialize(payload);
+    }
 
-                await deliveryService.EnqueueDeliveriesAsync(
-                    targetCompanyId: entity.ReceiverCompanyId,
-                    eventCode: "SHIPMENT_CREATED",
-                    payloadJson: payload,
-                    correlationId: corr,
-                    ct);
-
-                await deliveryService.EnqueueDeliveriesAsync(
-                    targetCompanyId: entity.ReceiverCompanyId,
-                    eventCode: "SHIPMENT_STATUS_CHANGED",
-                    payloadJson: payload,
-                    correlationId: corr,
-                    ct);
-
-                return new ShipmentDto(entity.Id, entity.SenderCompanyId, entity.ReceiverCompanyId, entity.Status, entity.Payload);
-            }
-
-            private static void ValidateJson(string json)
-            {
-                try { JsonDocument.Parse(json); }
-                catch { throw new InvalidOperationException("Invalid JSON payload."); }
-            }
-
-            private static string BuildEventPayload(Shipment s, Guid corr)
-            {
-                // payload envelope for receiver
-                return $$""" 
-                          "shipmentId": {{s.Id}},
-                          "senderCompanyId": {{s.SenderCompanyId}},
-                          "receiverCompanyId": {{s.ReceiverCompanyId}},
-                          "status": "{{s.Status}}",
-                          "payload": {{s.Payload}},
-                          "correlationId": "{{corr}}"
-                         """;
-            }
+    private static string BuildEventPayload(Shipment s, Guid corr)
+    {
+        // ده JSON صحيح
+        return $$"""
+        {
+          "shipmentId": {{s.Id}},
+          "senderCompanyId": {{s.SenderCompanyId}},
+          "receiverCompanyId": {{s.ReceiverCompanyId}},
+          "status": "{{s.Status}}",
+          "clientName": {{JsonSerializer.Serialize(s.ClientName)}},
+          "phoneNumber": {{JsonSerializer.Serialize(s.PhoneNumber)}},
+          "addressDescription": {{JsonSerializer.Serialize(s.AddressDescription)}},
+          "cashOnDelivery": {{s.CashOnDelivery}},
+          "payload": {{s.Payload}},
+          "correlationId": "{{corr}}"
         }
+        """;
     }
 }
